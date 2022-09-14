@@ -54,7 +54,9 @@ class ProfilingSession {
   CUpti_ProfilerReplayMode profiler_replay_mode_;
   CUpti_ProfilerRange profiler_range_;
   const std::string& metric_;
+#if CUDART_VERSION < 11040
   NVPA_MetricsContext* metrics_context_;
+#endif
   const std::string& chip_name_;
   int num_kernels_;
 
@@ -76,7 +78,9 @@ ProfilingSession::ProfilingSession(
   : profiler_replay_mode_(CUPTI_KernelReplay),
     profiler_range_(CUPTI_AutoRange),
     metric_(metric),
+#if CUDART_VERSION < 11040
     metrics_context_(metrics_context),
+#endif
     chip_name_(chip_name),
     num_kernels_(num_kernels),
     image_prefix_(image_prefix),
@@ -169,8 +173,13 @@ void ProfilingSession::stopProfiling() {
 
 std::vector<habitat::cuda::KernelMetric> ProfilingSession::getMeasuredMetrics() {
   std::vector<NV::Metric::Eval::MetricNameValue> metric_name_value_map;
+#if CUDART_VERSION < 11040
   bool succeeded = NV::Metric::Eval::GetMetricGpuValue(
       metrics_context_, chip_name_, counter_data_image_, {metric_}, metric_name_value_map);
+#else
+  bool succeeded = NV::Metric::Eval::GetMetricGpuValue(
+      chip_name_, counter_data_image_, {metric_}, metric_name_value_map);
+#endif
   if (!succeeded) {
     return {};
   }
@@ -247,7 +256,11 @@ class NewCuptiProfiler::State {
     }
 
     auto inserted = config_images_.emplace(std::make_pair<std::string, std::vector<uint8_t>>(std::string(metric), {}));
+#if CUDART_VERSION < 11040
     if (!NV::Metric::Config::GetConfigImage(metrics_context_, chip_name_, {metric}, inserted.first->second)) {
+#else
+    if (!NV::Metric::Config::GetConfigImage(chip_name_, {metric}, inserted.first->second)) {
+#endif
       throw std::runtime_error("Failed to create config_image!");
     }
     return inserted.first->second;
@@ -261,8 +274,13 @@ class NewCuptiProfiler::State {
 
     auto inserted = image_prefixes_.emplace(
         std::make_pair<std::string, std::vector<uint8_t>>(std::string(metric), {}));
+#if CUDART_VERSION < 11040
     if (!NV::Metric::Config::GetCounterDataPrefixImage(
           metrics_context_, chip_name_, {metric}, inserted.first->second)) {
+#else
+    if (!NV::Metric::Config::GetCounterDataPrefixImage(
+           chip_name_, {metric}, inserted.first->second)) {
+#endif
       throw std::runtime_error("Failed to create counter_data_image_prefix!");
     }
     return inserted.first->second;
